@@ -58,6 +58,9 @@ class FireRedTTS2:
 
     def load_prompt_audio(self, audio_path) -> torch.Tensor:
         audio, audio_sr = torchaudio.load(audio_path)
+        # Convert to mono if multi-channel
+        if audio.shape[0] > 1:
+            audio = torch.mean(audio, dim=0, keepdim=True)
         audio16k = torchaudio.functional.resample(audio, audio_sr, 16000)
         return audio16k
 
