@@ -211,6 +211,9 @@ class RedCodecInfer(RedCodec):
     def from_pretrained(cls, conf_path: str, ckpt_path: str) -> "RedCodecInfer":
         with open(conf_path, "r") as f:
             codec = RedCodec.from_config(conf_path)
+        # support cpu
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        ckpt = torch.load(ckpt_path, map_location=device)["generator"]
         ckpt = torch.load(ckpt_path)["generator"]
         codec.load_state_dict(ckpt)
         return cls(codec)
