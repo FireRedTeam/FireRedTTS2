@@ -61,8 +61,8 @@ with more speakers by extending training corpus.
 For more examples, see [demo page](https://fireredteam.github.io/demos/firered_tts_2/).
 
 ## News
-
-- [2025/09/12] 🔥 **We have added a UI tool to the dialogue generation.**
+- [2025/09/28] 🔥 **Supports bf16 inference, reducing VRAM usage from 14GB to 9GB and enabling consumer-grade GPU deployment.**
+- [2025/09/12] 🔥 We have added a UI tool to the dialogue generation.
 - [2025/09/08] 🔥 We release the [pre-trained checkpoints](https://huggingface.co/FireRedTeam/FireRedTTS2) and inference code.
 - [2025/09/02] 🔥 We release the [technical report](https://arxiv.org/abs/2509.02020) and [demo page](https://fireredteam.github.io/demos/firered_tts_2/)
 
@@ -75,7 +75,7 @@ For more examples, see [demo page](https://fireredteam.github.io/demos/firered_t
 - [ ] 2025/10
   - [ ] Release a base model with enhanced multilingual support.
   - [ ] **Provide fine-tuning code & tutorial for specific dialogue/multilingual data.**
-  - [ ] **End-to-end text-to-blog pipeline.**
+  - [ ] **End-to-end text-to-podcast pipeline.**
 
 ## Install & Model Download
 

@@ -13,14 +13,17 @@ from tqdm import tqdm
 
 
 class FireRedTTS2:
-    def __init__(self, pretrained_dir, gen_type, device):
+    def __init__(self, pretrained_dir, gen_type, device, use_bf16=False):
+        self.use_bf16 = use_bf16
+        self.device = device
+        self.sample_rate = 16000
+        self.max_seq_len = 3100
 
         assert os.path.exists(pretrained_dir)
         assert gen_type in ["monologue", "dialogue"]
         llm_config_path = os.path.join(pretrained_dir, "config_llm.json")
         if gen_type == "monologue":
             llm_ckpt_path = os.path.join(pretrained_dir, "llm_pretrain.pt")
-            # llm_ckpt_path = os.path.join(pretrained_dir, "llm_posttrain.pt")
         else:
             llm_ckpt_path = os.path.join(pretrained_dir, "llm_posttrain.pt")
         codec_config_path = os.path.join(pretrained_dir, "config_codec.json")
@@ -39,6 +42,14 @@ class FireRedTTS2:
         self._model = load_llm_model(
             configs=llm_config, checkpoint_path=llm_ckpt_path, device=device
         )
+        if use_bf16:
+            if torch.cuda.is_bf16_supported():
+                print("bf16 supported")
+                self._model.to(dtype=torch.bfloat16)
+            else:
+                self.use_bf16 = False
+                print("bf16 not supported")
+
         self._model.eval()
         self._model.setup_caches(1)
         print("[INFO] LLM Loaded...")
@@ -52,10 +63,6 @@ class FireRedTTS2:
         torch_codec.eval()
         self._audio_tokenizer = torch_codec.to(device)
         print("[INFO] Codec Loaded...")
-
-        self.sample_rate = 16000
-        self.device = device
-        self.max_seq_len = 3100
 
     def load_prompt_audio(self, audio_path) -> torch.Tensor:
         audio, audio_sr = torchaudio.load(audio_path)
