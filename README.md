@@ -88,7 +88,9 @@ For more examples, see [demo page](https://fireredteam.github.io/demos/firered_t
     cd FireRedTTS2
     ```
 
-- **Create Conda env**:
+- **Create env**:
+    
+    Setup environment with Conda:
 
     ``` sh
     conda create --name fireredtts2 python==3.11
@@ -100,6 +102,14 @@ For more examples, see [demo page](https://fireredteam.github.io/demos/firered_t
     # Step 2. Install Dependencies
     pip install -e .
     pip install -r requirements.txt
+    ```
+    or use Docker:
+    ``` sh
+    # Build docker image
+    docker build -t fireredtts2:v1.0 docker
+    
+    # Launch docker container
+    docker run -v=${PWD}:/workspace/FireRedTTS2 --ipc=host --net=host --gpus=all -it fireredtts2:v1.0 bash
     ```
 
 - **Model download**
