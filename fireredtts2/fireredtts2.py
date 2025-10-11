@@ -263,92 +263,6 @@ class FireRedTTS2:
 
         return gen_tokens
 
-    # @torch.inference_mode()
-    # def generate_stream(
-    #     self,
-    #     text: str,
-    #     speaker: str,
-    #     context: List[Segment],
-    #     max_audio_length_ms: float = 90_000,
-    #     temperature: float = 0.9,
-    #     topk: int = 50,
-    # ):
-    #     self._model.reset_caches()
-
-    #     max_generation_len = int(max_audio_length_ms / 80)
-    #     tokens, tokens_mask = [], []
-    #     for segment in context:
-    #         segment_tokens, segment_tokens_mask = self._tokenize_segment(segment)
-    #         tokens.append(segment_tokens)
-    #         tokens_mask.append(segment_tokens_mask)
-
-    #     gen_segment_tokens, gen_segment_tokens_mask = self._tokenize_text_segment(
-    #         text, speaker
-    #     )
-    #     tokens.append(gen_segment_tokens)
-    #     tokens_mask.append(gen_segment_tokens_mask)
-
-    #     prompt_tokens = torch.cat(tokens, dim=0).long().to(self.device)
-    #     prompt_tokens_mask = torch.cat(tokens_mask, dim=0).bool().to(self.device)
-
-    #     samples = []
-    #     curr_tokens = prompt_tokens.unsqueeze(0)
-    #     curr_tokens_mask = prompt_tokens_mask.unsqueeze(0)
-    #     curr_pos = (
-    #         torch.arange(0, prompt_tokens.size(0)).unsqueeze(0).long().to(self.device)
-    #     )
-
-    #     max_seq_len = 3100
-    #     max_context_len = max_seq_len - max_generation_len
-    #     if curr_tokens.size(1) >= max_context_len:
-    #         raise ValueError(
-    #             f"Inputs too long, must be below max_seq_len - max_generation_len: {max_context_len}"
-    #         )
-
-    #     # codec cache
-    #     codec_cache = {}
-    #     prev_sample = None
-
-    #     for _ in range(max_generation_len):
-    #         sample = self._model.generate_frame(
-    #             curr_tokens, curr_tokens_mask, curr_pos, temperature, topk
-    #         )
-    #         # eos
-    #         if torch.all(sample == 0):
-    #             break
-
-    #         # decode one token
-    #         if prev_sample is None:
-    #             prev_sample = sample  # sample: (b, nq)
-    #         else:
-    #             audio_chunk, codec_cache = self._audio_tokenizer.decode_one_token(
-    #                 prev_sample.unsqueeze(-1),
-    #                 codec_cache,
-    #                 last_token=False,
-    #             )
-    #             yield audio_chunk.squeeze(0)
-    #             prev_sample = sample
-    #         samples.append(sample)  # sample: (b, nq)
-
-    #         curr_tokens = torch.cat(
-    #             [sample, torch.zeros(1, 1).long().to(self.device)], dim=1
-    #         ).unsqueeze(1)
-    #         curr_tokens_mask = torch.cat(
-    #             [
-    #                 torch.ones_like(sample).bool(),
-    #                 torch.zeros(1, 1).bool().to(self.device),
-    #             ],
-    #             dim=1,
-    #         ).unsqueeze(1)
-    #         curr_pos = curr_pos[:, -1:] + 1
-
-    #     audio_chunk, codec_cache = self._audio_tokenizer.decode_one_token(
-    #         prev_sample.unsqueeze(-1),
-    #         codec_cache,
-    #         last_token=True,
-    #     )
-    #     yield audio_chunk.squeeze(0)
-
     @torch.inference_mode()
     def generate_dialogue(
         self,
@@ -464,3 +378,149 @@ class FireRedTTS2:
                 topk=topk,
             )
             return audio_tensor.unsqueeze(0)
+
+
+class FireRedTTS2_Stream(FireRedTTS2):
+
+    def generate(
+        self,
+        text: str,
+        speaker: str,
+        context: List[Segment],
+        max_audio_length_ms: float = 90_000,
+        temperature: float = 0.9,
+        topk: int = 20,
+    ):
+        self._model.reset_caches()
+
+        max_generation_len = int(max_audio_length_ms / 80)
+        tokens, tokens_mask = [], []
+        for segment in context:
+            segment_tokens, segment_tokens_mask = self._tokenize_segment(segment)
+            tokens.append(segment_tokens)
+            tokens_mask.append(segment_tokens_mask)
+
+        gen_segment_tokens, gen_segment_tokens_mask = self._tokenize_text_segment(
+            text, speaker
+        )
+        tokens.append(gen_segment_tokens)
+        tokens_mask.append(gen_segment_tokens_mask)
+
+        prompt_tokens = torch.cat(tokens, dim=0).long().to(self.device)
+        prompt_tokens_mask = torch.cat(tokens_mask, dim=0).bool().to(self.device)
+
+        curr_tokens = prompt_tokens.unsqueeze(0)
+        curr_tokens_mask = prompt_tokens_mask.unsqueeze(0)
+        curr_pos = (
+            torch.arange(0, prompt_tokens.size(0)).unsqueeze(0).long().to(self.device)
+        )
+
+        max_seq_len = 3100
+        max_context_len = max_seq_len - max_generation_len
+        if curr_tokens.size(1) >= max_context_len:
+            raise ValueError(
+                f"Inputs too long, must be below max_seq_len - max_generation_len: {max_context_len}"
+            )
+
+        # for streaming token2audio
+        codec_cache = {}
+        prev_sample = None
+        for _ in range(max_generation_len):
+            sample = self._model.generate_frame(
+                curr_tokens, curr_tokens_mask, curr_pos, temperature, topk
+            )
+            # eos
+            if torch.all(sample == 0):
+                break
+            
+            # token2audio one step
+            if prev_sample is None:
+                prev_sample = sample
+            else:
+                audio_chunk, codec_cache = self._audio_tokenizer.decode_one_token(
+                    prev_sample.unsqueeze(-1),
+                    codec_cache,
+                    last_token=False,
+                )
+                prev_sample = sample
+                yield audio_chunk.squeeze(0)
+
+            curr_tokens = torch.cat(
+                [sample, torch.zeros(1, 1).long().to(self.device)], dim=1
+            ).unsqueeze(1)
+            curr_tokens_mask = torch.cat(
+                [
+                    torch.ones_like(sample).bool(),
+                    torch.zeros(1, 1).bool().to(self.device),
+                ],
+                dim=1,
+            ).unsqueeze(1)
+            curr_pos = curr_pos[:, -1:] + 1
+
+        audio_chunk, codec_cache = self._audio_tokenizer.decode_one_token(
+            prev_sample.unsqueeze(-1),
+            codec_cache,
+            last_token=True,
+        )
+        yield audio_chunk.squeeze(0)
+
+    @torch.inference_mode()
+    def generate_dialogue(
+        self,
+        text_list,
+        prompt_wav_list=None,
+        prompt_text_list=None,
+        temperature=0.9,
+        topk=20,
+    ):
+        all_generated_segments = []
+        prompt_segments = []
+        text_list = process_text_list(text_list=text_list)
+        if prompt_wav_list is not None:
+            assert len(prompt_wav_list) == len(prompt_text_list)
+            # Prepare prompts
+            for i in range(len(prompt_wav_list)):
+                prompt_wav = prompt_wav_list[i]
+                prompt_text = prompt_text_list[i]
+                speaker = prompt_text[:4]
+                assert speaker in ["[S1]", "[S2]", "[S3]", "[S4]"]
+                prompt_segments.append(
+                    self.prepare_prompt(
+                        text=prompt_text, speaker=speaker, audio_path=prompt_wav
+                    )
+                )
+
+        for text in tqdm(text_list):
+            speaker = text[:4]
+            text = text[4:]
+            # print("---speaker:", speaker)
+            # print("---text:", text)
+            assert speaker in ["[S1]", "[S2]", "[S3]", "[S4]"]
+
+            audio_generator = self.generate(
+                text=text,
+                speaker=speaker,
+                context=prompt_segments + all_generated_segments,
+                max_audio_length_ms=30_000,
+                temperature=temperature,
+                topk=topk,
+            )
+            audio_tensor = []
+            for audio_chunk in audio_generator:
+                audio_tensor.append(audio_chunk)
+                yield audio_chunk.unsqueeze(0).cpu()
+            audio_tensor = torch.cat(audio_tensor, dim=0)
+
+            # 做上下文管理的时候需要将audio 转到16k
+            audio_16k = torchaudio.functional.resample(
+                audio_tensor.unsqueeze(0), 24000, 16000
+            )
+            all_generated_segments.append(
+                Segment(text=text, speaker=speaker, audio=audio_16k)
+            )
+
+    def generate_monologue(
+        self, text, prompt_wav=None, prompt_text=None, temperature=0.75, topk=20
+    ):
+        raise NotImplementedError('Monologue generation do not support streaming generation.')
+    
