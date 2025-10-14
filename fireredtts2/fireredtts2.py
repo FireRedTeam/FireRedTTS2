@@ -464,6 +464,51 @@ class FireRedTTS2_Stream(FireRedTTS2):
         )
         yield audio_chunk.squeeze(0)
 
+    def generate_single(
+        self, context: List[Segment], temperature: float = 0.9, topk: int = 20
+    ):
+        self._model.reset_caches()
+        max_generation_len = 400
+        tokens, tokens_mask = [], []
+        for segment in context:
+            segment_tokens, segment_tokens_mask = self._tokenize_segment(segment)
+            tokens.append(segment_tokens)
+            tokens_mask.append(segment_tokens_mask)
+
+        prompt_tokens = torch.cat(tokens, dim=0).long().to(self.device)
+        prompt_tokens_mask = torch.cat(tokens_mask, dim=0).bool().to(self.device)
+        prompt_tokens = prompt_tokens[:-3, :]
+        prompt_tokens_mask = prompt_tokens_mask[:-3, :]
+
+        curr_tokens = prompt_tokens.unsqueeze(0)
+        curr_tokens_mask = prompt_tokens_mask.unsqueeze(0)
+        curr_pos = (
+            torch.arange(0, prompt_tokens.size(0)).unsqueeze(0).long().to(self.device)
+        )
+
+        for _ in range(max_generation_len):
+            # sample: (1, nq)
+            sample = self._model.generate_frame(
+                curr_tokens, curr_tokens_mask, curr_pos, temperature, topk
+            )
+            # eos
+            if torch.all(sample == 0):
+                break
+            yield sample
+
+            # next AR
+            curr_tokens = torch.cat(
+                [sample, torch.zeros(1, 1).long().to(self.device)], dim=1
+            ).unsqueeze(1)
+            curr_tokens_mask = torch.cat(
+                [
+                    torch.ones_like(sample).bool(),
+                    torch.zeros(1, 1).bool().to(self.device),
+                ],
+                dim=1,
+            ).unsqueeze(1)
+            curr_pos = curr_pos[:, -1:] + 1
+
     @torch.inference_mode()
     def generate_dialogue(
         self,
@@ -519,8 +564,65 @@ class FireRedTTS2_Stream(FireRedTTS2):
                 Segment(text=text, speaker=speaker, audio=audio_16k)
             )
 
+    @torch.inference_mode()
     def generate_monologue(
         self, text, prompt_wav=None, prompt_text=None, temperature=0.75, topk=20
     ):
-        raise NotImplementedError('Monologue generation do not support streaming generation.')
+        # step1. construct context
+        if prompt_wav is not None:
+            assert os.path.exists(prompt_wav)
+            assert prompt_text is not None
+
+            prompt_text = clean_text(text=prompt_text)
+            text = clean_text(text=text)
+            text_list = split_text(text=text, length=400)
+
+            print('[INFO] text_list: {}'.format(text_list))
+
+            tokens: List[torch.Tensor] = []
+            codec_cache = {}
+            for text in text_list:
+                text = clean_text(text=text)
+                input_text = prompt_text[:-1] + "," + text
+                prompt_a = self.prepare_prompt(
+                    text=input_text, speaker="[S1]", audio_path=prompt_wav
+                )
+                context = [prompt_a]
+
+                token_generator = self.generate_single(
+                    context=context, temperature=temperature, topk=topk
+                )
+                for token in token_generator:
+                    # token: (1, nq)
+                    if len(tokens) > 2:
+                        # generate previous token
+                        audio_chunk, codec_cache = self._audio_tokenizer.decode_one_token(
+                            tokens[-1].unsqueeze(-1),
+                            codec_cache,
+                            last_token=False,
+                        )
+                        yield audio_chunk.cpu()
+                    tokens.append(token)
+
+            # process last token
+            audio_chunk, codec_cache = self._audio_tokenizer.decode_one_token(
+                tokens[-1].unsqueeze(-1),
+                codec_cache,
+                last_token=True,
+            )
+            yield audio_chunk.cpu()
+        else:
+            # random speaker
+            text = clean_text(text=text.strip())
+            audio_generator = self.generate(
+                text=text,
+                speaker="[S1]",
+                context=[],
+                max_audio_length_ms=30_000,
+                temperature=temperature,
+                topk=topk,
+            )
+            for audio_chunk in audio_generator:
+                yield audio_chunk.unsqueeze(0).cpu()
+
     
