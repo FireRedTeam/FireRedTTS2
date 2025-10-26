@@ -222,6 +222,42 @@ def init_weights(model: nn.Module):
     return model
 
 
+def load_model(
+    configs,
+    checkpoint_path: Union[str, Path] = None,
+    device: Union[str, torch.device] = "cuda",
+) -> Model:
+    """Load model, add forward method, and move to device.
+
+    Args:
+        model_name_or_checkpoint_path: Name or path of pretrained model or checkpoint.
+        device: Device to move the model to.
+        decoder_loss_weight: Decoder loss weight.
+    """
+
+    model_arg = ModelArgs(
+        backbone_flavor=configs["models"]["backbone_flavor"],
+        decoder_flavor=configs["models"]["decoder_flavor"],
+        text_vocab_size=configs["models"]["text_vocab_size"],
+        audio_vocab_size=configs["models"]["audio_vocab_size"],
+        audio_num_codebooks=configs["models"]["audio_num_codebooks"],
+        decoder_loss_weight=configs["models"]["decoder_loss_weight"],
+        use_text_loss=True,
+    )
+    model = Model(model_arg)
+
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        state_dict = torch.load(
+            checkpoint_path, map_location="cpu", weights_only=False
+        )["model"]
+        model.load_state_dict(state_dict)
+    else:
+        model = init_weights(model)
+
+    model = model.to(device=device)
+    return model
+
+
 def load_llm_model(
     configs,
     checkpoint_path: Union[str, Path] = None,

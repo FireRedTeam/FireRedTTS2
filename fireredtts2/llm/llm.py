@@ -114,12 +114,6 @@ class Model(nn.Module, PyTorchModelHubMixin):
         self.decoder_loss_weight = config.decoder_loss_weight
         self.use_text_loss = config.use_text_loss
 
-        # debug
-        # print("---backbone_dim:", backbone_dim)
-        # print("---decoder_dim:", decoder_dim)
-        # print("---self.decoder_loss_weight:", self.decoder_loss_weight)
-        # print("---self.use_text_loss:", self.use_text_loss)
-
     def setup_caches(self, max_batch_size: int) -> torch.Tensor:
         """Setup KV caches and return a causal mask."""
         dtype = next(self.parameters()).dtype
@@ -156,32 +150,19 @@ class Model(nn.Module, PyTorchModelHubMixin):
         bsz, seq_len, _ = tokens.size()
         device = tokens.device
 
-        # print("---tokens:\n", tokens, tokens.shape)
-        # print("---tokens_mask:\n", tokens_mask, tokens_mask.shape)
-        # print("---bsz:", bsz)
-        # print("---seq_len:", seq_len)
-
         # embed tokens
-        embeds = self._embed_tokens(tokens)  # (bsz,seq_len,33,2048)
-        # print("---embeds:\n", embeds, embeds.shape)
+        embeds = self._embed_tokens(tokens)  # (bsz,seq_len,17,2048)
 
         # get targets and codebook embeddings corresponding to audio tokens
         audio_mask = tokens_mask[:, :, 0]  # [bsz, seq_len]
         target_tokens = tokens[audio_mask][:, :-1]  # [audio_len, n_codebooks]
         # [audio_len, n_codebooks, embed_dim]
         c_embeds = embeds[:, :, :-1, :][audio_mask]
-        # print("---audio_mask:\n", audio_mask, audio_mask.shape)
-        # print("---target_tokens:\n", target_tokens, target_tokens.shape)
 
         # get targets corresponding to text tokens
         text_mask = tokens_mask[:, :, -1]
         text_target_mask = torch.roll(input=text_mask, shifts=1, dims=1)
         text_target_tokens = tokens[text_target_mask][:, -1]
-
-        # print("---text_target_mask:\n", text_target_mask, text_target_mask.shape)
-        # print("---target_text_tokens:\n", text_target_tokens, text_target_tokens.shape)
-
-        # print("\n\n")
 
         # retain just non-padding embeddings
         masked_embeds = embeds * tokens_mask.unsqueeze(-1)
@@ -204,12 +185,10 @@ class Model(nn.Module, PyTorchModelHubMixin):
         h = self.backbone(h, input_pos=input_pos, mask=backbone_attn_mask).to(
             dtype=dtype
         )
-        # print("---h:\n", h, h.shape)
 
         # get backbone embeddings used for audio codebook prediction predict first codebook and compute loss
         audio_mask = torch.roll(audio_mask, -1, 1)  # shift audio mask to the right by 1
         audio_h = h[audio_mask]  # [audio_len, embed_dim]
-        # print("---audio_mask after shift:\n", audio_mask, audio_mask.shape)
         c0_logits = self.codebook0_head(audio_h)  # [audio_len, audio_vocab_size]
         c0_target = target_tokens[:, 0]  # [audio_len]
         c0_loss = F.cross_entropy(c0_logits, c0_target)
@@ -218,13 +197,9 @@ class Model(nn.Module, PyTorchModelHubMixin):
         text_h = h[text_mask]
         text_logits = self.text_head(text_h)
         text_loss = F.cross_entropy(text_logits, text_target_tokens, ignore_index=0)
-        # print("---text_h:\n", text_h, text_h.shape)
-        # print("---text_logits:\n", text_logits)
-        # print("---text_loss:", text_loss)
 
-        # "compute amortization" (train decoder on random 1/16 subset of audio tokens)
+        # "compute amortization" (train decoder on random 1/8 subset of audio tokens)
         # important change to 1/8
-        # indices = torch.randperm(c_embeds.size(0))[: c_embeds.size(0) // 16]
         indices = torch.randperm(c_embeds.size(0))[: c_embeds.size(0) // 8]
         # [audio_len//16, n_codebooks-1, embed_dim]
         c_embeds = c_embeds[indices][:, :-1, :]
@@ -348,24 +323,3 @@ class Model(nn.Module, PyTorchModelHubMixin):
         )
 
         return torch.cat([audio_embeds, text_embeds], dim=-2)
-
-
-if __name__ == "__main__":
-
-    MIMI_SAMPLE_RATE = 24000
-    BACKBONE_FLAVOR = "qwen-3b"
-    DECODER_FLAVOR = "qwen-500m"
-    TEXT_VOCAB_SIZE = 128256
-    AUDIO_VOCAB_SIZE = 2051
-    AUDIO_NUM_CODEBOOKS = 32
-
-    config = ModelArgs(
-        backbone_flavor=BACKBONE_FLAVOR,
-        decoder_flavor=DECODER_FLAVOR,
-        text_vocab_size=TEXT_VOCAB_SIZE,
-        audio_vocab_size=AUDIO_VOCAB_SIZE,
-        audio_num_codebooks=AUDIO_NUM_CODEBOOKS,
-        decoder_loss_weight=0.5,
-        use_text_loss=True,
-    )
-    model = Model(config)
