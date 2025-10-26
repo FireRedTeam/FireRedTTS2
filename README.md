@@ -61,10 +61,13 @@ with more speakers by extending training corpus.
 For more examples, see [demo page](https://fireredteam.github.io/demos/firered_tts_2/).
 
 ## News
-- [2025/10/11] 🔥 **We now support streaming dialogue generation.**
-- [2025/09/12] 🔥 We have added a UI tool to the dialogue generation.
-- [2025/09/08] 🔥 We release the [pre-trained checkpoints](https://huggingface.co/FireRedTeam/FireRedTTS2) and inference code.
-- [2025/09/02] 🔥 We release the [technical report](https://arxiv.org/abs/2509.02020) and [demo page](https://fireredteam.github.io/demos/firered_tts_2/)
+
+- [2025/10/26] 🔥 **We have released comprehensive [fine-tuning](<https://github.com/FireRedTeam/FireRedTTS2/blob/main/bin/finetune_example/tutorial.md>) code and tutorials (based on the LJSpeech dataset).** You can easily adapt this foundation to fine-tune models for multilingual or even conversational datasets. With conversational data, you can achieve podcast generation results comparable to our demo showcase.
+- [2025/10/11] **We now support streaming dialogue generation.**
+- [2025/09/28] **Supports bf16 inference, reducing VRAM usage from 14GB to 9GB and enabling consumer-grade GPU deployment.**
+- [2025/09/12] We have added a UI tool to the dialogue generation.
+- [2025/09/08] We release the [pre-trained checkpoints](https://huggingface.co/FireRedTeam/FireRedTTS2) and inference code.
+- [2025/09/02] We release the [technical report](https://arxiv.org/abs/2509.02020) and [demo page](https://fireredteam.github.io/demos/firered_tts_2/)
 
 ## Roadmap
 
@@ -89,7 +92,7 @@ For more examples, see [demo page](https://fireredteam.github.io/demos/firered_t
     ```
 
 - **Create env**:
-    
+
     Setup environment with Conda:
 
     ``` sh
@@ -103,7 +106,9 @@ For more examples, see [demo page](https://fireredteam.github.io/demos/firered_t
     pip install -e .
     pip install -r requirements.txt
     ```
+
     or use Docker:
+
     ``` sh
     # Build docker image
     docker build -t fireredtts2:v1.0 docker
@@ -184,6 +189,7 @@ torchaudio.save("chat_clone.wav", all_audio, 24000)
 **Dialogue Generation (Sreaming)**
 
 **NOTE:** Each audio chunk is 0.08 seconds, except the first (a little shorter) and last (a little longer).
+
 ```python
 import torch
 import torchaudio
