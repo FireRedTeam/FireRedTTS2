@@ -77,7 +77,7 @@ For more examples, see [demo page](https://fireredteam.github.io/demos/firered_t
 
 - [ ] 2025/10
   - [ ] Release a base model with enhanced multilingual support.
-  - [ ] **Provide fine-tuning code & tutorial for specific dialogue/multilingual data.**
+  - [x] **Provide fine-tuning code & tutorial for specific dialogue/multilingual data.**
   - [ ] **End-to-end text-to-podcast pipeline.**
 
 ## Install & Model Download
@@ -294,3 +294,12 @@ for i in range(len(lines)):
 - **DO NOT** use this model for **ANY illegal activities**❗️❗️❗️❗️❗️❗️
 - The developers assume no liability for any misuse of this model.
 - If you identify any instances of **abuse**, **misuse**, or **fraudulent** activities related to this project, **please report them to our team immediately.**
+
+
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=FireRedTeam/FireRedTTS2&type=date&legend=top-left)](https://www.star-history.com/#FireRedTeam/FireRedTTS2&type=date&legend=top-left)
+
+
+
